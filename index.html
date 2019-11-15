@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="cvStyle.css">
+    <title>OpenCV.js</title>
+</head>
+<body>
+    <!-- Our HTML will go here-->
+    <div class="modal"></div>
+
+    <input type="file" id="fileInput" name="file" />
+    <img id="imageSrc" alt="No Image" />
+
+    <canvas id="imageCanvas"></canvas>
+
+    <canvas id="secondCanvas"></canvas>
+
+    <canvas id="thirdCanvas"></canvas>
+
+    <canvas id="fourthCanvas"></canvas>
+
+    <canvas id="fifthCanvas"></canvas>
+
+    <canvas id="sixthCanvas"></canvas>
+
+
+    <script src="underscore-min.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+    var original = null;
+    var xAxisStartPt = null;
+    var ratioHeight = 0; // height for 1%
+
+
+    // double check later
+    var cities = ['Seattle', 'Denver', 'Dallas', 'Houston', 'Minneapolis-St. Paul','Miami-Hialeah', 'Boston', 'New York', 'Philadelphia', 'Orlando', 'Detroit', 'Atlanta', 'Phoenix', 'Tampa-St. Petersburg', 'Washington, DC', 'Chicago', 'St. Louis', 'United States', 'Los Angeles', 'San Antonio', 'San Diego', 'New Orleans', 'San Francisco', 'Anaheim-Santa Ana', 'Nashville', 'Norfolk-Virginia Beach', 'Oahu Island']
+
+    var citiesObj = {
+        'Seattle': {}, 'Denver': {}, 'Dallas': {}, 'Houston': {}, 'Minneapolis-St. Paul': {},'Miami-Hialeah': {}, 'Boston': {}, 'New York': {}, 'Philadelphia': {}, 'Orlando': {}, 'Detroit': {}, 'Atlanta': {}, 'Phoenix': {}, 'Tampa-St. Petersburg': {}, 'Washington, DC': {}, 'Chicago': {}, 'St. Louis': {}, 'United States': {}, 'Los Angeles': {}, 'San Antonio': {}, 'San Diego': {}, 'New Orleans': {}, 'San Francisco': {}, 'Anaheim-Santa Ana': {}, 'Nashville': {}, 'Norfolk-Virginia Beach': {}, 'Oahu Island': {}
+    }
+
+    document.body.classList.add("loading");
+
+    function onOpenCvReady() {
+        document.body.classList.remove("loading");
+    }
+
+    let imgElement = document.getElementById('imageSrc');
+    let inputElement = document.getElementById('fileInput');
+
+    // access the uploaded file and convert it into a URL
+    inputElement.onchange = function() {
+        imgElement.src = URL.createObjectURL(event.target.files[0]);
+    }
+
+    imgElement.onload = function() {
+        let src = cv.imread(imgElement);
+        original = src;
+        let dst = new cv.Mat();
+
+        cv.threshold(src, dst, 170, 255, cv.THRESH_BINARY); 
+        cv.imshow('imageCanvas', dst);
+
+        boundaryGraph();
+    }
+
+    function boundaryGraph() {
+        document.body.classList.add("loading");
+
+        let src = cv.imread('imageCanvas');  
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3); 
+        cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        let rectangleColor = new cv.Scalar(255, 0, 0);
+
+        cv.findContours(src, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);   
+        let areasObj = [];
+
+        for (let i = 0; i < contours.size(); ++i) {
+            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+                                Math.round(Math.random() * 255));
+            cv.drawContours(dst, contours, i, color, 1, cv.LINE_8, hierarchy, 100);
+
+            let cont = contours.get(i);
+            let area = cv.contourArea(cont, false); // false on orientation
+            let rect = cv.boundingRect(contours.get(i));
+
+            areasObj.push({
+                'cArea': area,
+                'cRect': rect
+            });
+        }
+
+        // Assuming that the largest area is the whole image, want the second largest to find the graph
+        areasObj = _(areasObj).sortBy(function(obj) {
+            return obj.cArea;
+        });
+        let graphObj = areasObj[areasObj.length - 2];
+        let rect = graphObj.cRect;
+        let point1 = new cv.Point(rect.x, rect.y);
+        let point2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
+
+        cv.rectangle(dst, point1, point2, rectangleColor, 2, cv.LINE_AA, 0);
+        let copy = original.roi(rect);
+
+        cv.imshow('secondCanvas', dst);
+        cv.imshow('thirdCanvas', copy);
+
+        document.body.classList.remove("loading");
+        src.delete();
+        dst.delete();
+        copy.delete();
+        contours.delete();
+        hierarchy.delete();
+
+        //groupBars();
+        createCoordinateSystem();
+    }
+
+    function groupBars() {
+        let src = cv.imread('thirdCanvas');
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+        let rectangleColor = new cv.Scalar(255, 0, 0);
+
+        let graphHeight = src.rows;
+        let graphWidth = src.cols - xAxisStartPt.x;
+        let groupWidth = graphWidth / 27; // 27 is number of x values
+        console.log("group width: " + groupWidth);
+
+        let idx = 0;
+        for (let i = xAxisStartPt.x; i < graphWidth - 2; i = i + groupWidth) {
+            let rect = new cv.Rect(i, 0, groupWidth, graphHeight);
+            var copy = src.roi(rect);
+            miniContour(copy, idx); 
+            idx++;
+        }
+
+
+
+        //testing specific ones
+        // let rect = new cv.Rect(xAxisStartPt.x, 0, groupWidth, graphHeight);
+        // var copy = src.roi(rect);
+        // cv.imshow('fourthCanvas', copy);
+        // miniContour(copy, 0);
+
+        console.log(citiesObj);
+        src.delete();
+        dst.delete();
+    }
+
+    
+    // dark blue - 110
+    // light blue - 180
+    // yellow - 200
+
+    function miniContour(src, idx) {
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+        cv.threshold(src, src, 80, 255, cv.THRESH_BINARY);
+        cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
+        cv.Canny(src, src, 50, 100, 3); 
+        cv.imshow('fifthCanvas', src);
+
+        // know that there are 3 bars for every x-axis value (plus 1 for error rate)
+        var barWidth = src.cols / 3 + 3;
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        let rectangleColor = new cv.Scalar(255, 0, 0);
+        let revPar = 0;
+        let supply = 0;
+        let demand = 0;
+
+        cv.findContours(src, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+        // seen cases of duplicates so make sure only ever drawing 3 rects
+        let rectsArr = [];
+        for (let i = 0; i < contours.size(); ++i) {
+            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+                                    Math.round(Math.random() * 255));
+            let cont = contours.get(i);
+            cv.drawContours(dst, contours, i,  color, 1, cv.LINE_8, hierarchy, 100);
+            let rect = cv.boundingRect(cont);
+            let point1 = new cv.Point(rect.x, rect.y);
+            let point2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
+
+            let contObj = {
+                start: point1,
+                end: point2,
+                height: rect.height
+            }
+            
+            cv.rectangle(dst, point1, point2, color, 2, cv.LINE_4, 0);
+
+            // check for duplicates... need to compare each value since comparing objs doesn't work
+            var res = _(rectsArr).find(function(obj) {
+                return obj.rectObj.width == rect.width && obj.rectObj.height == rect.height 
+                    && obj.rectObj.x == rect.x && obj.rectObj.y == rect.y;
+            });
+            if (res) continue;
+
+            rectsArr.push({
+                rectObj: rect,
+                start: point1,
+                end: point2
+            });
+        }
+        
+        // Know the order of bars and what each one represents
+        rectsArr = _(rectsArr).sortBy(function(obj) {
+            return obj.start.x;
+        });
+
+        if (rectsArr.length != 3) {
+            console.log("!!!!!!!!!!! This one found didn't find 3 rectangles !!!!!!!!!    " + idx);
+            console.log("rectangles #:  " + rectsArr.length);
+            return;
+        }
+
+        convertToPercentage(rectsArr, idx);
+
+        cv.imshow('sixthCanvas', dst);
+
+        src.delete();
+        dst.delete();
+        contours.delete();
+        hierarchy.delete();
+    }
+
+    function convertToPercentage(rectsArr, idx) {
+        let cityObj = citiesObj[cities[idx]];
+
+        _(rectsArr).each(function(obj, i) {
+            let percent = obj.rectObj.height / ratioHeight;
+
+            if (obj.end.y > xAxisStartPt.y + 2) percent = percent * (-1);
+            
+            // Not really necessary if know what the order is 
+            switch(i) {
+                case 0:
+                    cityObj.Supply = percent;
+                    break;
+                case 1: 
+                    cityObj.Demand = percent;
+                    break;
+                case 2: 
+                    cityObj.RevPar = percent;
+                    break;
+            }
+        })
+    }
+
+    function createCoordinateSystem() {
+        let src = cv.imread('thirdCanvas');  
+        //cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0); adding this shows the vertical line...
+        cv.threshold(src, src, 100, 255, cv.THRESH_BINARY);
+
+        let dst = new cv.Mat();
+        let lines = new cv.Mat();
+        let color = new cv.Scalar(255, 0, 0);
+
+        let low = new cv.Mat(src.rows, src.cols, src.type(), [0, 0, 0, 0]);
+        let high = new cv.Mat(src.rows, src.cols, src.type(), [100, 100, 100, 255]);
+        cv.inRange(src, low, high, dst);
+
+        let maxLengthRow = 0;
+        //cv.imshow('fourthCanvas', src);
+        //cv.imshow('fifthCanvas', dst);
+
+        cv.HoughLinesP(dst, lines, 1, Math.PI / 180, 2, 0, 0);
+        let dstCopy = cv.Mat.zeros(dst.rows, dst.cols, cv.CV_8UC3); 
+
+        for (let i = 0; i < lines.rows; ++i) {
+            let startPoint = new cv.Point(lines.data32S[i * 4], lines.data32S[i * 4 + 1]);
+            let endPoint = new cv.Point(lines.data32S[i * 4 + 2], lines.data32S[i * 4 + 3]);
+
+            // calc the hyp to get length of two coordinates
+            let a = startPoint.x - endPoint.x;
+            let b = startPoint.y - endPoint.y;
+            let currentLength = Math.sqrt(a*a + b*b);
+
+            if(currentLength > maxLengthRow) {
+                maxLengthRow = currentLength;
+                xAxisStartPt = startPoint;
+                cv.line(dstCopy, startPoint, endPoint, color);
+                console.log(xAxisStartPt);
+            }
+        }
+
+        getRatio();
+
+        //cv.imshow('fourthCanvas', dstCopy);
+        
+        
+        src.delete();
+        dst.delete();
+        dstCopy.delete();
+    }
+
+    function getRatio() {
+        let src = cv.imread('thirdCanvas'); 
+        //getXTicks(src);
+        cv.threshold(src, src, 170, 255, cv.THRESH_BINARY);
+        //cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0); 
+        //cv.Canny(src, src, 50, 200, 3);
+
+        let srcCopy = new cv.Mat();
+        let low = new cv.Mat(src.rows, src.cols, src.type(), [0, 0, 0, 0]);
+        let high = new cv.Mat(src.rows, src.cols, src.type(), [100, 100, 100, 255]);
+        cv.inRange(src, low, high, srcCopy);
+        //cv.imshow('fourthCanvas', srcCopy);
+
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3); 
+        let lines = new cv.Mat();
+        let color = new cv.Scalar(255, 0, 0);
+
+        cv.HoughLinesP(srcCopy, lines, 1, Math.PI / 180, 2, 0, 0);
+        let points = [];
+
+        for (let i = 0; i < lines.rows; ++i) {
+            let startPoint = new cv.Point(lines.data32S[i * 4], lines.data32S[i * 4 + 1]);
+            let endPoint = new cv.Point(lines.data32S[i * 4 + 2], lines.data32S[i * 4 + 3]);
+            let a = startPoint.x - endPoint.x;
+            let b = startPoint.y - endPoint.y;
+            let currentLength = Math.sqrt(a*a + b*b);
+
+            // Don't want the lines that start after the axis 
+            if(startPoint.x > xAxisStartPt.x + 1) continue;
+
+            // Try to find the point along the at the very beginning edge case here bc y-axis doesn't start at 0/1
+            if (currentLength != 0 || startPoint.x > 1) continue;
+            points.push(startPoint);
+
+            cv.line(dst, startPoint, endPoint, color); 
+        }
+
+        points = _(points).sortBy(function(pt) {
+            return pt.y;
+        });
+        ratioHeight = (points[1].y - points[0].y) / 2; 
+
+        // console.log(ratioHeight);
+        // console.log(points);
+
+        groupBars();
+        
+        //cv.imshow('fifthCanvas', dst);
+    }
+
+    function getXTicks(src) {
+        cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0); 
+        cv.Canny(src, src, 50, 100, 3);
+        cv.imshow('fourthCanvas', src);
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+        let lines = new cv.Mat();
+        let color = new cv.Scalar(255, 0, 0);
+
+        cv.HoughLinesP(src, lines, 1, Math.PI / 180, 2, 0, 0);
+        for (let i = 0; i < lines.rows; ++i) {
+            let startPoint = new cv.Point(lines.data32S[i * 4], lines.data32S[i * 4 + 1]);
+            let endPoint = new cv.Point(lines.data32S[i * 4 + 2], lines.data32S[i * 4 + 3]);
+            let a = startPoint.x - endPoint.x;
+            let b = startPoint.y - endPoint.y;
+            let currentLength = Math.sqrt(a*a + b*b);
+
+            // Only draw the lines on the x-axis
+            //if (startPoint.y < xAxisStartPt.y || startPoint.y > xAxisStartPt.y + 10 || currentLength > 5) continue;
+            console.log(startPoint);
+            cv.line(dst, startPoint, endPoint, color); 
+        }
+
+        let width = src.cols - xAxisStartPt.x;
+        let first = new cv.Point(xAxisStartPt.x, 0);
+        let second = new cv.Point(xAxisStartPt.x, src.rows);
+        cv.line(dst, first, second, [255,255,255,255]);
+
+        let third = new cv.Point(xAxisStartPt.x, 0);
+        let fourth = new cv.Point(xAxisStartPt.x, src.rows);
+        cv.line(dst, third, fourth, [255,255,255,255]);
+        cv.imshow('fifthCanvas', dst);
+        
+    }
+
+
+</script>
+
+<script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+
+</body>
+</html>
