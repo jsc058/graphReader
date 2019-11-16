@@ -29,6 +29,7 @@
 <script type="text/javascript">
     var original = null;
     var xAxisStartPt = null;
+    var numXVals = 27; // hardcoding this in - represent the number of cities/x values we have
     var ratioHeight = 0; // height for 1%
 
 
@@ -126,7 +127,7 @@
 
         let graphHeight = src.rows;
         let graphWidth = src.cols - xAxisStartPt.x;
-        let groupWidth = graphWidth / 27; // 27 is number of x values
+        let groupWidth = graphWidth / numXVals; 
         console.log("group width: " + groupWidth);
 
         let idx = 0;
@@ -140,10 +141,10 @@
 
 
         //testing specific ones
-        // let rect = new cv.Rect(xAxisStartPt.x, 0, groupWidth, graphHeight);
+        // let rect = new cv.Rect(xAxisStartPt.x + (groupWidth * 2), 0, groupWidth, graphHeight);
         // var copy = src.roi(rect);
         // cv.imshow('fourthCanvas', copy);
-        // miniContour(copy, 0);
+        // miniContour(copy, 2);
 
         console.log(citiesObj);
         src.delete();
@@ -195,7 +196,7 @@
             // check for duplicates... need to compare each value since comparing objs doesn't work
             var res = _(rectsArr).find(function(obj) {
                 return obj.rectObj.width == rect.width && obj.rectObj.height == rect.height 
-                    && obj.rectObj.x == rect.x && obj.rectObj.y == rect.y;
+                    && obj.rectObj.x == rect.x && obj.rectObj.y == rect.y || (obj.end.x == point2.x && obj.end.y == point2.y);
             });
             if (res) continue;
 
@@ -211,6 +212,8 @@
             return obj.start.x;
         });
 
+        cv.imshow('sixthCanvas', dst);
+        
         if (rectsArr.length != 3) {
             console.log("!!!!!!!!!!! This one found didn't find 3 rectangles !!!!!!!!!    " + idx);
             console.log("rectangles #:  " + rectsArr.length);
@@ -219,7 +222,7 @@
 
         convertToPercentage(rectsArr, idx);
 
-        cv.imshow('sixthCanvas', dst);
+        
 
         src.delete();
         dst.delete();
@@ -290,7 +293,6 @@
         getRatio();
 
         //cv.imshow('fourthCanvas', dstCopy);
-        
         
         src.delete();
         dst.delete();
